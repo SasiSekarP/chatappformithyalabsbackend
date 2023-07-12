@@ -15,7 +15,6 @@ const io = socketIO(server, {
 });
 
 const cors = require("cors");
-const { Socket } = require("dgram");
 app.use(cors());
 app.use(express.json());
 const secretKey = "MY_SECRET_TOKEN";
@@ -178,7 +177,6 @@ async function connectToMongoDB() {
 
       // create new group
       socket.on("createnewgroup", (data) => {
-        console.log(data);
         const { selectedValues, groupname, groupid } = data;
         groupchat.insertOne({
           members: selectedValues,
@@ -207,19 +205,13 @@ async function connectToMongoDB() {
             }
           );
         });
-
-        console.log("hit");
-
-        socket.emit("creategroupstatus", { status: "ok" });
       });
 
       // add admin get member list
       socket.on("sendmemberlist", async (data) => {
-        // console.log(data);
         const membersfile = await groupchat.findOne({ _id: data });
-        console.log(membersfile);
-        // const memberarr = await membersfile.members;
-        // socket.emit("backendsendingmemberlisttomakeadmin", memberarr);
+        const memberarr = await membersfile.members;
+        socket.emit("backendsendingmemberlisttomakeadmin", memberarr);
       });
 
       // add new admin
