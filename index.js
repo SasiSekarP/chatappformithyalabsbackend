@@ -15,6 +15,7 @@ const io = socketIO(server, {
 });
 
 const cors = require("cors");
+const { Socket } = require("dgram");
 app.use(cors());
 app.use(express.json());
 const secretKey = "MY_SECRET_TOKEN";
@@ -165,12 +166,19 @@ async function connectToMongoDB() {
         });
         socket.emit("messageUpdated", messageCollection.message);
 
-        // io.to(socket.id).emit("messageUpdated", messageCollection.message);
-        // io.to(receiver).emit("messageUpdated", messageCollection.message);
+        // io.to(people[receiver]).emit(
+        // "messageUpdated",
+        // messageCollection.message
+        // );
+        // io.to(people[sender]).emit(
+        //   "messageUpdateds",
+        //   messageCollection.message
+        // );
       });
 
       // create new group
       socket.on("createnewgroup", (data) => {
+        console.log(data);
         const { selectedValues, groupname, groupid } = data;
         groupchat.insertOne({
           members: selectedValues,
@@ -199,13 +207,19 @@ async function connectToMongoDB() {
             }
           );
         });
+
+        console.log("hit");
+
+        socket.emit("creategroupstatus", { status: "ok" });
       });
 
       // add admin get member list
       socket.on("sendmemberlist", async (data) => {
+        // console.log(data);
         const membersfile = await groupchat.findOne({ _id: data });
-        const memberarr = await membersfile.members;
-        socket.emit("backendsendingmemberlisttomakeadmin", memberarr);
+        console.log(membersfile);
+        // const memberarr = await membersfile.members;
+        // socket.emit("backendsendingmemberlisttomakeadmin", memberarr);
       });
 
       // add new admin
@@ -243,6 +257,50 @@ async function connectToMongoDB() {
       socket.on("sendgroupchat", async (data) => {
         const chatdata = await groupchat.findOne({ _id: data });
         socket.emit("groupchat", chatdata);
+      });
+
+      // messagefromgroupchat
+      socket.on("messagefromgroupchat", async (data) => {
+        groupchat.updateOne(
+          { _id: data.groupid },
+          { $push: { message: data } }
+        );
+
+        const chatdata = await groupchat.findOne({ _id: data });
+
+        socket.emit("updatedgroupmessage", chatdata);
+      });
+
+      // sending data for Remove admin
+      socket.on("sendadmindetails", async (data) => {
+        const groupdetails = await groupchat.findOne({ _id: data });
+        const adminarr = await groupdetails.admin;
+        socket.emit("adminarrforeditingfrombackend", adminarr);
+      });
+
+      // remove these members from admin post
+      socket.on("removethesemembersfromadminpost", (data) => {
+        groupchat.updateOne(
+          { _id: data.groupid },
+          { $pull: { admin: { $in: data.arr } } }
+        );
+        data.arr.map((singledata) => {
+          groupmanagementcollection.updateOne(
+            { username: singledata },
+            {
+              $pull: { admingrouparr: { groupid: data.groupid } },
+            }
+          );
+        });
+      });
+
+      // sending list of available people to beadmin
+      socket.on("sendlistofavailablepeopletobeadmin", async (data) => {
+        const groupdata = await groupchat.findOne({ _id: data });
+        const availablemembers = groupdata.members.filter(
+          (element) => !groupdata.admin.includes(element)
+        );
+        socket.emit("responseforavaliablepeopletobeadmin", availablemembers);
       });
 
       // Handle disconnection
