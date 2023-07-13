@@ -137,6 +137,7 @@ async function connectToMongoDB() {
               username: [sender, receiver],
               message: [],
             });
+            socket.emit("backendsendingpersonalchat", []);
           } else {
             socket.emit(
               "backendsendingpersonalchat",
@@ -172,9 +173,9 @@ async function connectToMongoDB() {
         });
         socket.emit("messageUpdated", messageCollection.message);
 
-        // io.to(people[receiver]).emit(
-        // "messageUpdated",
-        // messageCollection.message
+        // io.to(users[receiver]).emit(
+        //   "messageUpdated",
+        //   messageCollection.message
         // );
         // io.to(people[sender]).emit(
         //   "messageUpdateds",
@@ -300,6 +301,134 @@ async function connectToMongoDB() {
           (element) => !groupdata.admin.includes(element)
         );
         socket.emit("responseforavaliablepeopletobeadmin", availablemembers);
+      });
+
+      // sending people list to add as members
+      socket.on("sendavailablepeopletobeagroupmember", async (data) => {
+        const groupdata = await groupchat.findOne({ _id: data });
+        const existingmembers = await groupdata.members;
+        // await console.log(existingmembers);
+
+        const contacts = await chatUserDetails
+          .find({})
+          .sort({ username: 1 })
+          .toArray();
+        const contactarr = await contacts.map((data) => {
+          return data.username;
+        });
+        // console.log(contactarr);
+
+        const availablemembers = contactarr.filter(
+          (element) => !existingmembers.includes(element)
+        );
+        // console.log(availablemembers);
+        socket.emit("availablememberstobethememberofgroup", availablemembers);
+      });
+
+      // add this member to the group
+      socket.on("addthismembertothegroup", (data) => {
+        groupchat.updateOne(
+          { _id: data.groupid },
+          {
+            $push: { members: { $each: data.selectedValues } },
+          }
+        );
+
+        data.selectedValues.map(async (data) => {
+          const { groupid, groupname } = data;
+          const user = await groupmanagementcollection.findOne({
+            username: data,
+          });
+          if (!user) {
+            groupmanagementcollection.insertOne({
+              username: data,
+              groupnamearr: { groupid },
+            });
+          }
+          groupmanagementcollection.updateOne(
+            { username: data },
+            {
+              $push: {
+                groupnamearr: { groupid: data.groupid, groupname: groupname },
+              },
+            }
+          );
+        });
+      });
+
+      // sending people list to remove from the group
+      socket.on("sendpeoplelisttoremovefromthegroup", async (data) => {
+        if (data) {
+          const groupdata = await groupchat.findOne({ _id: data });
+
+          const availablemembers = await groupdata.members;
+
+          socket.emit("availablepeopleforremoval", availablemembers);
+        }
+      });
+
+      // remove this members from group
+      socket.on("removethismembersfromgroup", (data) => {
+        if (data) {
+          const { groupid, selectedValues } = data;
+          groupchat.updateOne(
+            { _id: groupid },
+            {
+              $pull: {
+                members: { $all: selectedValues },
+                admin: { $all: selectedValues },
+              },
+            }
+          );
+
+          groupmanagementcollection.updateMany(
+            { username: { $in: selectedValues } },
+            {
+              $pull: {
+                groupnamearr: {
+                  groupid,
+                },
+              },
+              $pull: { admingrouparr: { groupid } },
+            }
+          );
+        }
+      });
+
+      // sending list of member to delete group
+      socket.on("deletethisgroup", async (data) => {
+        if (data) {
+          const groupdata = await groupchat.findOne({ _id: data });
+
+          const memberarrtodelete = await groupdata.members;
+
+          groupmanagementcollection.updateMany(
+            { username: { $in: memberarrtodelete } },
+            {
+              $pull: {
+                groupnamearr: {
+                  groupid: data,
+                },
+                admingrouparr: {
+                  groupid: data,
+                },
+              },
+            }
+          );
+
+          groupchat.deleteOne({ _id: data });
+        }
+      });
+
+      // sending admin list to show
+      socket.on("sendadminlist", async (data) => {
+        if (data) {
+          const groupdata = await groupchat.findOne({ _id: data });
+
+          const adminlist = await groupdata.admin;
+
+          socket.emit("currentadminlist", adminlist);
+        }
       });
 
       // Handle disconnection
