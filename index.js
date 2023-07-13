@@ -101,41 +101,48 @@ async function connectToMongoDB() {
       // fetch contact
       socket.on("fetchContact", (data) => {
         const { token } = data;
-        jwt.verify(token, secretKey, async (err, payload) => {
-          if (err) {
-            console.log(err);
-          } else {
-            const { username } = payload;
-            const contacts = await chatUserDetails
-              .find({}, { _id: 0, username: 1 })
-              .sort({ username: 1 })
-              .toArray();
+        if (token) {
+          jwt.verify(token, secretKey, async (err, payload) => {
+            if (err) {
+              console.log(err);
+            } else {
+              const { username } = payload;
+              const contacts = await chatUserDetails
+                .find({}, { _id: 0, username: 1 })
+                .sort({ username: 1 })
+                .toArray();
 
-            const contactArr = contacts.map((data) => {
-              return { username: data.username, id: data._id.toString() };
-            });
+              const contactArr = contacts.map((data) => {
+                return { username: data.username, id: data._id.toString() };
+              });
 
-            const contactArrWithoutUser = contactArr.filter((data) => {
-              return data.username !== username;
-            });
-            socket.emit("sendContacts", contactArrWithoutUser);
-          }
-        });
+              const contactArrWithoutUser = contactArr.filter((data) => {
+                return data.username !== username;
+              });
+              socket.emit("sendContacts", contactArrWithoutUser);
+            }
+          });
+        }
       });
 
       // single person chat
       socket.on("sendSinglePersonChat", async (data) => {
-        const { sender, receiver } = data;
-        const messageCollection = await contactChatCollection.findOne({
-          username: { $all: [sender, receiver] },
-        });
-        if (!messageCollection) {
-          contactChatCollection.insertOne({
-            username: [sender, receiver],
-            message: [],
+        const { sender, receiver, token } = data;
+        if (token) {
+          const messageCollection = await contactChatCollection.findOne({
+            username: { $all: [sender, receiver] },
           });
-        } else {
-          socket.emit("backendsendingpersonalchat", messageCollection.message);
+          if (!messageCollection) {
+            contactChatCollection.insertOne({
+              username: [sender, receiver],
+              message: [],
+            });
+          } else {
+            socket.emit(
+              "backendsendingpersonalchat",
+              messageCollection.message
+            );
+          }
         }
       });
 
