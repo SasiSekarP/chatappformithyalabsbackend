@@ -375,8 +375,8 @@ async function connectToMongoDB() {
             { _id: groupid },
             {
               $pull: {
-                members: { $all: selectedValues },
-                admin: { $all: selectedValues },
+                members: { $in: selectedValues },
+                admin: { $in: selectedValues },
               },
             }
           );
